@@ -1,0 +1,26 @@
+# Path to the CSV with one row per (item, coder) annotation.
+input: annotations.csv
+
+# Where to write the HTML report.
+output: output/report.html
+
+# Directory to write <key>_priority.csv files for nominal keys.
+# Required only if any key below is "nominal".
+priority_dir: output
+
+# Column names in the input CSV.
+coder_id: user_id
+item_id: item_id
+
+# Columns used to pull abstract text/title into the priority CSV (optional).
+item_text_column: abstract
+item_title_column: title
+
+# Restrict to these coder ids only (optional; omit to use everyone in the CSV).
+# coders:
+#   - alice
+#   - bob
+
+# Each key to report on, mapped to its type: nominal, ordinal, interval, or ratio.
+keys:
+  example_key: nominal

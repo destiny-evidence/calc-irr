@@ -1,0 +1,18 @@
+input: export_2.csv
+output: output/out.html
+priority_dir: output
+
+coder_id: username
+item_id: item_id
+item_text_column: text
+item_title_column: title
+
+coders:
+  - promise.nduku
+  - ignacio.pita
+  - ishita.gopal
+  - andres.mena
+
+keys:
+  include: nominal
+  is_climate: nominal
