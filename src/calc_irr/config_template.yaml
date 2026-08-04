@@ -4,15 +4,19 @@ input: annotations.csv
 # Where to write the HTML report.
 output: output/report.html
 
-# Directory to write <key>_priority.csv files for nominal keys.
+# Directory to write <key>_coding.csv files for nominal keys.
 # Required only if any key below is "nominal".
 priority_dir: output
+
+# Directory to write <key>_to_review.csv files (the disagreement subset of
+# each coding file) for nominal keys. Optional -- defaults to priority_dir.
+# review_dir: output
 
 # Column names in the input CSV.
 coder_id: user_id
 item_id: item_id
 
-# Columns used to pull abstract text/title into the priority CSV (optional).
+# Columns used to pull abstract text/title into the coding/review CSVs (optional).
 item_text_column: abstract
 item_title_column: title
 
@@ -20,6 +24,14 @@ item_title_column: title
 # coders:
 #   - alice
 #   - bob
+
+# Merge resolved/gold labels in as an extra coder, per key (optional). Each
+# path is a CSV with an item id column and a `resolved` column -- e.g. the
+# output of merge_resolutions(). Useful for checking a newly-added coder
+# against labels that were already adjudicated.
+# gold:
+#   example_key: path/to/example_key_resolved.csv
+# gold_coder_id: gold
 
 # Each key to report on, mapped to its type: nominal, ordinal, interval, or ratio.
 keys:

@@ -14,6 +14,9 @@ _DEFAULTS = {
     "item_title_column": "title",
     "coders": None,
     "priority_dir": None,
+    "review_dir": None,
+    "gold": None,
+    "gold_coder_id": "gold",
 }
 
 _TEMPLATE_NAME = "config_template.yaml"
@@ -50,6 +53,8 @@ def _run(args: argparse.Namespace) -> None:
     Path(config["output"]).parent.mkdir(parents=True, exist_ok=True)
     if config["priority_dir"]:
         Path(config["priority_dir"]).mkdir(parents=True, exist_ok=True)
+    if config["review_dir"]:
+        Path(config["review_dir"]).mkdir(parents=True, exist_ok=True)
 
     calculator = IrrCalculator(
         df=df,
@@ -57,16 +62,30 @@ def _run(args: argparse.Namespace) -> None:
         coder_id=config["coder_id"],
         item_id=config["item_id"],
     )
+
+    if config["gold"]:
+        for key, resolved_path in config["gold"].items():
+            calculator.add_gold(
+                key, resolved_path, gold_coder_id=config["gold_coder_id"]
+            )
+
     output_path = calculator.generate_report(
         output_path=config["output"],
         key_types=key_types,
         priority_csv_dir=config["priority_dir"],
+        review_csv_dir=config["review_dir"],
         item_text_column=config["item_text_column"],
         item_title_column=config["item_title_column"],
     )
+    if config["gold"]:
+        print(f"Merged gold labels for keys: {', '.join(config['gold'])}")
     print(f"Wrote report to {output_path}")
     if config["priority_dir"]:
-        print(f"Wrote priority CSVs to {config['priority_dir']}")
+        print(f"Wrote coding CSVs to {config['priority_dir']}")
+    if config["review_dir"] or config["priority_dir"]:
+        print(
+            f"Wrote to-review CSVs to {config['review_dir'] or config['priority_dir']}"
+        )
 
 
 def _init(args: argparse.Namespace) -> None:
