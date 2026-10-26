@@ -1,10 +1,4 @@
-# how to identify difficult records
-# nice display
-# how to relay bad info?
-
 from datetime import datetime
-from enum import StrEnum
-from html import escape
 from itertools import combinations
 from pathlib import Path
 
@@ -15,12 +9,14 @@ from pandas import DataFrame
 from pydantic import BaseModel, ConfigDict, Field
 from sklearn.metrics import cohen_kappa_score
 
+from calc_irr.key_type import KeyType
+from calc_irr.report import (
+    build_coding_export,
+    render_key_section,
+    render_report_html,
+)
 
-class KeyType(StrEnum):
-    NOMINAL = "nominal"
-    ORDINAL = "ordinal"
-    INTERVAL = "interval"
-    RATIO = "ratio"
+__all__ = ["IrrCalculator", "KeyType"]
 
 
 class IrrCalculator(BaseModel):
@@ -70,42 +66,6 @@ class IrrCalculator(BaseModel):
         )
 
         self.wide_df[key] = wide_df.merge(gold_series, on=self.item_id, how="left")
-
-    def merge_resolutions(
-        self,
-        coding_df: DataFrame,
-        resolutions: str | Path | DataFrame,
-        item_id_col: str | None = None,
-    ) -> DataFrame:
-        """Combine a `<key>_coding.csv` export with a completed `<key>_to_review.csv` into final resolved data.
-
-        `coding_df` is the full per-key export (e.g. from `generate_report`'s
-        `<key>_coding.csv`) -- every fully-coded item, with `resolved` already
-        filled in for items all coders agreed on. `resolutions` (a CSV path or
-        DataFrame) is the `<key>_to_review.csv` subset after human review, with
-        `resolved` now filled in plus any extra columns added during
-        discussion (e.g. notes, Final Decision, Reason). Rows in `resolutions`
-        overwrite/extend the matching rows in `coding_df`; already-agreed rows
-        pass through unchanged.
-        """
-        item_id_col = item_id_col or self.item_id
-
-        resolutions_df = (
-            resolutions
-            if isinstance(resolutions, DataFrame)
-            else pd.read_csv(resolutions)
-        )
-
-        merged = coding_df.set_index(item_id_col)
-        updates = resolutions_df.set_index(item_id_col)
-
-        for col in updates.columns:
-            if col not in merged.columns:
-                merged[col] = pd.NA
-
-        merged.update(updates)
-
-        return merged.reset_index()
 
     def collapse_one_hot_annotation(self, key: str) -> None:
         if self.df is None:
@@ -172,11 +132,31 @@ class IrrCalculator(BaseModel):
                     "coder_a": coder_a,
                     "coder_b": coder_b,
                     "n": len(pair_df),
+                    "n_disagree": int((pair_df[coder_a] != pair_df[coder_b]).sum()),
                     "cohen_kappa": kappa,
                 }
             )
 
         return DataFrame(rows)
+
+    def disagreement_count(self, key: str) -> dict[str, int]:
+        """Count fully-coded items where not every coder gave the same value.
+
+        Uses the same rule as the `resolved` column in `<key>_coding.csv`, so
+        for nominal keys `n_disagreements` equals the rows in `<key>_to_review.csv`.
+        """
+        wide_df = self.wide_df[key]
+        coders = [col for col in wide_df.columns if col != self.item_id]
+        n_coders = self._resolve_n_coders(key)
+
+        votes = wide_df[coders]
+        fully_coded = votes[votes.notna().sum(axis=1) == n_coders]
+        n_disagreements = int((fully_coded.nunique(axis=1) > 1).sum())
+
+        return {
+            "n_fully_coded": len(fully_coded),
+            "n_disagreements": n_disagreements,
+        }
 
     def krippendorff_alpha(
         self, key: str, level_of_measurement: KeyType | None = None
@@ -214,6 +194,125 @@ class IrrCalculator(BaseModel):
             )
 
         return DataFrame(rows)
+
+    def class_distribution(self, key: str) -> DataFrame:
+        """Count how often each class was chosen, per coder and across all coders.
+
+        One row per class, one count column per coder, then `all` (total votes
+        for the class) and `% of all` (its share of all non-missing votes).
+        """
+        wide_df = self.wide_df[key]
+        coders = [col for col in wide_df.columns if col != self.item_id]
+
+        counts = DataFrame(
+            {coder: wide_df[coder].dropna().value_counts() for coder in coders}
+        )
+        counts = counts.fillna(0).astype(int).sort_index()
+        counts["all"] = counts.sum(axis=1)
+        total = counts["all"].sum()
+        share = counts["all"] / total * 100 if total else counts["all"] * 0.0
+        counts["% of all"] = share.map(lambda v: f"{v:.1f}%")
+
+        counts.index = counts.index.map(self._format_class)
+        return counts.rename_axis("class").reset_index()
+
+    def agreement_profile(self, key: str) -> tuple[DataFrame, DataFrame]:
+        """Break fully-coded items down by how the coders' votes fell.
+
+        Returns `(summary, breakdown)`:
+        - summary: one "Unanimous <class>" row per class all coders agreed on,
+          then a "Disagreement" row -- these add up to the fully-coded items.
+        - breakdown: the disagreements grouped by vote pattern -- one column
+          per coder with their vote, then how many items had that exact
+          combination (e.g. alice=1, bob=0, carol=0 is an alice-only
+          inclusion on a binary key), most common first.
+        """
+        wide_df = self.wide_df[key]
+        coders = [col for col in wide_df.columns if col != self.item_id]
+        n_coders = self._resolve_n_coders(key)
+
+        votes = wide_df[coders]
+        fully_coded = votes[votes.notna().sum(axis=1) == n_coders]
+        n_items = len(fully_coded)
+        unanimous = fully_coded.nunique(axis=1) == 1
+
+        def pct(n: int) -> str:
+            return f"{n / n_items * 100:.1f}%" if n_items else "0.0%"
+
+        summary_rows = [
+            {
+                "outcome": f"Unanimous {self._format_class(cls)}",
+                "items": int(n),
+                "% of fully coded": pct(n),
+            }
+            for cls, n in fully_coded[unanimous]
+            .iloc[:, 0]
+            .value_counts()
+            .sort_index()
+            .items()
+        ]
+        n_disagree = int((~unanimous).sum())
+        summary_rows.append(
+            {
+                "outcome": "Disagreement",
+                "items": n_disagree,
+                "% of fully coded": pct(n_disagree),
+            }
+        )
+
+        breakdown = (
+            fully_coded[~unanimous]
+            .map(self._format_class)
+            .value_counts()
+            .reset_index(name="items")
+        )
+        breakdown["% of disagreements"] = breakdown["items"].map(
+            lambda n: f"{n / n_disagree * 100:.1f}%"
+        )
+
+        return DataFrame(summary_rows), breakdown
+
+    def coder_vs_majority(self, key: str) -> DataFrame:
+        """Per coder, how often their vote differs from the majority vote.
+
+        The majority is the class chosen by more than half the coders. Only
+        fully-coded items that have one are compared, so on a 3-class key an
+        item where every coder picked something different is left out.
+        """
+        wide_df = self.wide_df[key]
+        coders = [col for col in wide_df.columns if col != self.item_id]
+        n_coders = self._resolve_n_coders(key)
+
+        votes = wide_df[coders]
+        fully_coded = votes[votes.notna().sum(axis=1) == n_coders]
+        top_share = fully_coded.apply(lambda row: row.value_counts().max(), axis=1)
+        has_majority = top_share > n_coders / 2
+        compared = fully_coded[has_majority]
+        majority = compared.mode(axis=1).iloc[:, 0]
+
+        rows = []
+        for coder in coders:
+            n_compared = len(compared)
+            differs = int((compared[coder] != majority).sum())
+            rows.append(
+                {
+                    "coder": coder,
+                    "items compared": n_compared,
+                    "differs from majority": differs,
+                    "% differs": f"{differs / n_compared * 100:.1f}%"
+                    if n_compared
+                    else "0.0%",
+                }
+            )
+
+        return DataFrame(rows)
+
+    @staticmethod
+    def _format_class(value: object) -> object:
+        """Show whole-number class codes as ints (pivoting turns them into floats)."""
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        return value
 
     def _resolve_n_coders(self, key: str) -> int:
         """Return self.n_coders if set, otherwise infer it from the coder columns."""
@@ -288,64 +387,6 @@ class IrrCalculator(BaseModel):
             return self.df[columns].drop_duplicates(subset=self.item_id)
         return None
 
-    @staticmethod
-    def _dataframe_to_html_table(df: DataFrame) -> str:
-        return df.to_html(
-            index=False,
-            classes="data-table",
-            border=0,
-            na_rep="—",
-            float_format=lambda v: f"{v:.3f}",
-        )
-
-    def _build_coding_export(
-        self, key: str, disagreement_df: DataFrame, abstracts_df: DataFrame | None
-    ) -> DataFrame:
-        """All items for a key, with disagreement_level, abstract text, each coder's vote,
-
-        and a "resolved" column: the shared classification when all coders
-        agree, blank otherwise (left for discussion to fill in).
-        """
-        assert self.item_id is not None
-        item_id_col = self.item_id
-
-        to_resolve = disagreement_df[[item_id_col, "disagreement_level"]].copy()
-        to_resolve.insert(0, "key", key)
-
-        if abstracts_df is not None:
-            to_resolve = to_resolve.merge(abstracts_df, on=item_id_col, how="left")
-
-        votes = self.wide_df[key]
-        coder_cols = [c for c in votes.columns if c != item_id_col]
-        to_resolve = to_resolve.merge(votes, on=item_id_col, how="left")
-
-        all_agree = to_resolve[coder_cols].nunique(axis=1, dropna=False) == 1
-        to_resolve["resolved"] = to_resolve[coder_cols].iloc[:, 0].where(all_agree)
-
-        return to_resolve
-
-    def _render_key_section(
-        self, key: str, alpha: float, summary_df: DataFrame, kappa_df: DataFrame
-    ) -> str:
-        return f"""
-        <section class="key-section">
-            <h2>{escape(key)}</h2>
-            <p class="alpha-stat">Krippendorff's alpha: <strong>{alpha:.3f}</strong></p>
-            <h3>Coder completeness</h3>
-            {self._dataframe_to_html_table(summary_df)}
-            <h3>Pairwise Cohen's kappa</h3>
-            {self._dataframe_to_html_table(kappa_df)}
-        </section>
-        """
-
-    @staticmethod
-    def _render_report_html(generated_at: str, key_sections: list[str]) -> str:
-        template_path = Path(__file__).resolve().parent / "report_template.html"
-        template = template_path.read_text()
-        return template.replace("$generated_at", escape(generated_at)).replace(
-            "$key_sections", "".join(key_sections)
-        )
-
     def generate_report(
         self,
         output_path: str,
@@ -355,8 +396,10 @@ class IrrCalculator(BaseModel):
         abstracts_df: DataFrame | None = None,
         item_text_column: str = "abstract",
         item_title_column: str | None = "title",
+        source_file: str | None = None,
+        write_csvs: bool = True,
     ) -> str:
-        """Write an HTML IRR report (alpha, coder completeness, kappa) for all keys to output_path.
+        """Write an HTML IRR report (alpha, disagreements, coder completeness, kappa) for all keys to output_path.
 
         For each "nominal" key (2 categories = binary, or more), also writes:
         - <priority_csv_dir>/<key>_coding.csv: every fully-coded item, with
@@ -367,12 +410,22 @@ class IrrCalculator(BaseModel):
           from the coding file (where `resolved` is blank) -- the lean subset
           to actually send out for discussion. Defaults to priority_csv_dir
           if review_csv_dir isn't given.
+
+        `source_file`, if given, is shown in the report header so the report
+        can be traced back to the export it was built from.
+
+        With `write_csvs=False`, only the HTML report is written -- the coding
+        and review CSVs are left untouched, so a review file already being
+        edited isn't overwritten.
         """
         resolved_abstracts = self._resolve_abstracts_df(
             abstracts_df, item_text_column, item_title_column
         )
 
-        priority_keys = [k for k in self.keys if key_types[k] == KeyType.NOMINAL]
+        key_sections = []
+        priority_keys = [
+            k for k in self.keys if write_csvs and key_types[k] == KeyType.NOMINAL
+        ]
         if priority_keys and priority_csv_dir is None:
             raise ValueError(
                 "priority_csv_dir is required when key_types includes a 'nominal' key"
@@ -380,31 +433,52 @@ class IrrCalculator(BaseModel):
         priority_dir = Path(priority_csv_dir) if priority_csv_dir else None
         review_dir = Path(review_csv_dir) if review_csv_dir else priority_dir
 
-        key_sections = []
-
         for key in self.keys:
             self._ensure_wide(key)
             task_type = key_types[key]
 
             alpha = self.krippendorff_alpha(key, task_type)
+            disagreements = self.disagreement_count(key)
             summary = self.coder_summary(key)
             kappa = self.pairwise_cohen_kappa(key)
-            key_sections.append(self._render_key_section(key, alpha, summary, kappa))
+            # Interval/ratio keys can take many distinct values, so per-class tables aren't useful there
+            is_categorical = task_type in (KeyType.NOMINAL, KeyType.ORDINAL)
+            distribution = self.class_distribution(key) if is_categorical else None
+            profile = self.agreement_profile(key) if is_categorical else None
+            majority = self.coder_vs_majority(key) if is_categorical else None
+            key_sections.append(
+                render_key_section(
+                    key,
+                    alpha,
+                    disagreements,
+                    summary,
+                    kappa,
+                    distribution,
+                    profile,
+                    majority,
+                )
+            )
 
-            if task_type == KeyType.NOMINAL:
+            if write_csvs and task_type == KeyType.NOMINAL:
                 assert priority_dir is not None
                 assert review_dir is not None
                 disagreement = self.assign_disagreement_level(key, task_type=task_type)
-                export = self._build_coding_export(
-                    key, disagreement, resolved_abstracts
+                export = build_coding_export(
+                    key,
+                    disagreement,
+                    self.wide_df[key],
+                    self.item_id,
+                    resolved_abstracts,
                 )
                 export.to_csv(priority_dir / f"{key}_coding.csv", index=False)
 
                 to_resolve = export[export["resolved"].isna()]
                 to_resolve.to_csv(review_dir / f"{key}_to_review.csv", index=False)
 
-        html_doc = self._render_report_html(
-            datetime.now().strftime("%Y-%m-%d %H:%M"), key_sections
+        html_doc = render_report_html(
+            datetime.now().strftime("%Y-%m-%d %H:%M"),
+            key_sections,
+            source_file,
         )
 
         with open(output_path, "w") as f:

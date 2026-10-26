@@ -20,10 +20,13 @@ body {
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
-.generated-at { color: #666; font-size: 0.9rem; margin-top: 0; margin-bottom: 2rem; }
+.generated-at { color: #666; font-size: 0.9rem; margin-top: 0; margin-bottom: 0.25rem; }
+.source-file { color: #666; font-size: 0.9rem; margin-top: 0; margin-bottom: 2rem; }
+.source-file code { word-break: break-all; }
 h2 { font-size: 1.3rem; margin-top: 2.5rem; border-bottom: 2px solid #eee; padding-bottom: 0.4rem; }
 h3 { font-size: 1rem; margin-top: 1.5rem; color: #444; }
 .alpha-stat { font-size: 1rem; }
+.table-note { color: #666; font-size: 0.85rem; margin: 0.25rem 0; }
 table.data-table {
     border-collapse: collapse;
     width: 100%;
@@ -43,6 +46,7 @@ table.data-table tr:nth-child(even) { background: #fafafa; }
 <div class="report">
     <h1>Inter-Rater Reliability Report</h1>
     <p class="generated-at">Generated $generated_at</p>
+    $source_line
     $key_sections
 </div>
 </body>

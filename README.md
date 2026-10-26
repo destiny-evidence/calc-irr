@@ -25,6 +25,8 @@ uv add --editable /path/to/calc-irr
 calc-irr init [path]        # write a starter config (default: config.yaml); errors if it exists
 calc-irr init --force       # overwrite an existing config
 calc-irr run <config.yaml>  # generate the report and coding/review CSVs
+calc-irr run <config.yaml> --report-only  # regenerate just the HTML report; CSVs untouched
+calc-irr resolve <config.yaml>  # combine agreed labels with the completed review file
 ```
 
 The template written by `init` lives at `src/calc_irr/config_template.yaml`
@@ -75,8 +77,17 @@ keys:
 
 ## Output
 
-- **HTML report** (`output`): per key, Krippendorff's alpha, coder
-  completeness, and pairwise Cohen's kappa.
+- **HTML report** (`output`): the input file it was built from, then per
+  key, Krippendorff's alpha, number of
+  disagreements (fully-coded items where coders didn't all agree), coder
+  completeness, class distribution (votes per class, per coder and overall),
+  agreement vs. disagreement (unanimous items per class, then disagreements
+  broken down by vote combination, one column per coder), coder vs. majority
+  (per coder, number and % of items where their vote differs from the class
+  chosen by more than half the coders) -- these three for nominal/ordinal keys
+  only -- and pairwise Cohen's kappa with per-pair disagreement counts.
+  Sections are numbered within each key, each with a one-line caption saying
+  what it shows.
 - **Coding CSV** (`<priority_dir>/<key>_coding.csv`, one per nominal key):
   every fully-coded item with its `disagreement_level` (`High`/`Medium`/`Low`, by
   degree of coder disagreement), abstract text, each coder's vote, and a
@@ -86,9 +97,23 @@ keys:
   just the disagreement rows from the coding CSV (where `resolved` is
   blank) — the lean file to actually send out for discussion. Once it comes
   back with `resolved` filled in (plus whatever discussion columns, e.g.
-  notes/decision/reason), combine it with the coding CSV via
-  `IrrCalculator.merge_resolutions()` to get the final resolved data, rather
-  than hand-saving a third full copy.
+  notes/decision/reason), run `calc-irr resolve` to get the final resolved
+  data (see "Resolving disagreements" below), rather than hand-saving a
+  third full copy.
+
+## Resolving disagreements
+
+After discussion, save the completed review file as
+`<resolved_dir>/<key>_to_review_completed.csv`, with the final value typed
+into `resolved` for each row, and run `calc-irr resolve <config.yaml>`. It
+writes `<resolved_dir>/<key>_resolved.csv`: every item from
+`<key>_coding.csv` with just `key`, `item_id`, title, text, `resolved` and
+`decision` (`unanimous` if all coders agreed, `adjudicated` if the label came
+from the review file) -- no coder votes or discussion notes. Items the coders agreed on keep their
+label; discussed items take the hand-filled value if it is numeric and one of
+the categories the coders used. Anything else (blank, text like `Exclude`, a
+typo like `5`) leaves `resolved` blank for that row, and the item ids are
+printed so they can be followed up.
 
 ## Validating a coder against already-resolved labels
 
