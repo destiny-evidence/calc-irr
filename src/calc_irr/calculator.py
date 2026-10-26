@@ -14,7 +14,9 @@ from calc_irr.report import (
     build_coding_export,
     render_key_section,
     render_report_html,
+    render_text_quality_summary,
 )
+from calc_irr.text_quality import text_quality_counts, text_quality_flags
 
 __all__ = ["IrrCalculator", "KeyType"]
 
@@ -398,6 +400,9 @@ class IrrCalculator(BaseModel):
         item_title_column: str | None = "title",
         source_file: str | None = None,
         write_csvs: bool = True,
+        text_quality: bool = True,
+        language_model_path: str | None = None,
+        missing_placeholders: list[str] | None = None,
     ) -> str:
         """Write an HTML IRR report (alpha, disagreements, coder completeness, kappa) for all keys to output_path.
 
@@ -417,12 +422,36 @@ class IrrCalculator(BaseModel):
         With `write_csvs=False`, only the HTML report is written -- the coding
         and review CSVs are left untouched, so a review file already being
         edited isn't overwritten.
+
+        With `text_quality` (the default) and item text available, the report
+        ends with a "Text quality" summary and the coding/review CSVs get True/False
+        `title_missing`, `abstract_missing`, `title_non_english` and
+        `abstract_non_english` columns after the abstract text (see
+        `text_quality.text_quality_flags`). `language_model_path` overrides
+        where the fastText model is cached; `missing_placeholders` replaces
+        the default list of "no abstract" placeholder strings.
         """
         resolved_abstracts = self._resolve_abstracts_df(
             abstracts_df, item_text_column, item_title_column
         )
 
         key_sections = []
+        # The text quality summary goes after all the per-key sections
+        summary_sections = []
+        if text_quality and resolved_abstracts is not None:
+            quality = text_quality_flags(
+                resolved_abstracts,
+                self.item_id,
+                item_title_column,
+                item_text_column,
+                model_path=language_model_path,
+                placeholders=missing_placeholders,
+            )
+            resolved_abstracts = resolved_abstracts.merge(quality, on=self.item_id)
+            summary_sections.append(
+                render_text_quality_summary(text_quality_counts(quality), len(quality))
+            )
+
         priority_keys = [
             k for k in self.keys if write_csvs and key_types[k] == KeyType.NOMINAL
         ]
@@ -477,7 +506,7 @@ class IrrCalculator(BaseModel):
 
         html_doc = render_report_html(
             datetime.now().strftime("%Y-%m-%d %H:%M"),
-            key_sections,
+            key_sections + summary_sections,
             source_file,
         )
 

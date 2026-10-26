@@ -87,12 +87,20 @@ keys:
   chosen by more than half the coders) -- these three for nominal/ordinal keys
   only -- and pairwise Cohen's kappa with per-pair disagreement counts.
   Sections are numbered within each key, each with a one-line caption saying
-  what it shows.
+  what it shows. After all the keys: a "Text quality" summary (items with a
+  missing title/abstract or non-English text, see below).
 - **Coding CSV** (`<priority_dir>/<key>_coding.csv`, one per nominal key):
   every fully-coded item with its `disagreement_level` (`High`/`Medium`/`Low`, by
   degree of coder disagreement), abstract text, each coder's vote, and a
   `resolved` column — pre-filled with the shared classification when all
   coders agree, left blank when they don't. The full audit record.
+  Also four True/False text-quality columns right after the abstract:
+  `title_missing`, `abstract_missing` (blank, a placeholder like "N/A", or
+  under 20 characters), `title_non_english` and `abstract_non_english`
+  (abstracts are checked sentence by sentence with fastText, so partly
+  non-English abstracts count). The language model (~1MB) is downloaded to
+  `~/.cache/calc-irr/` on first run; if that fails, the non-English columns
+  are skipped with a warning. Set `text_quality: false` to turn these off.
 - **To-review CSV** (`<priority_dir>/<key>_to_review.csv`, one per nominal key):
   just the disagreement rows from the coding CSV (where `resolved` is
   blank) — the lean file to actually send out for discussion. Once it comes

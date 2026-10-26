@@ -23,8 +23,9 @@ priority_dir: output
 coder_id: user_id
 item_id: item_id
 
-# Title and abstract text, copied into the coding/review/resolved CSVs
-# (optional).
+# Title and abstract text, copied into the coding/review/resolved CSVs and
+# used by the text quality checks below. Optional: if the text column isn't
+# in the CSV, both are skipped.
 item_text_column: abstract
 item_title_column: title
 
@@ -44,6 +45,21 @@ keys:
 # ---------------------------------------------------------------------------
 # Extra information in the report and coding/review CSVs (calc-irr run)
 # ---------------------------------------------------------------------------
+
+# Automatic text checks, on by default. The report ends with a "Text quality"
+# summary, and the coding/review CSVs get True/False columns after the
+# abstract text:
+#   title_missing, abstract_missing -- blank, a placeholder like "N/A", or
+#     (abstracts only) under 20 characters
+#   title_non_english, abstract_non_english -- abstracts are checked sentence
+#     by sentence, so partly non-English abstracts are caught too
+# Language detection uses fastText's model, downloaded (~1MB) on first run to
+# ~/.cache/calc-irr/ unless language_model_path points at a saved copy. If it
+# can't be loaded, the non_english columns are skipped with a warning.
+text_quality: true
+# language_model_path: path/to/lid.176.ftz
+# Replaces the built-in list of "no abstract" placeholders (case-insensitive):
+# missing_placeholders: ["", "n/a", "none", "no abstract available"]
 
 # Merge resolved/gold labels in as an extra coder, per key (optional). Each
 # path is a CSV with an item id column and a `resolved` column -- e.g. the

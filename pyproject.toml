@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "fasttext>=0.9.3",
     "krippendorff>=0.8.2",
     "pandas>=3.0.3",
     "pydantic>=2.13.4",

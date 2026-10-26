@@ -18,6 +18,9 @@ _DEFAULTS = {
     "resolved_dir": None,
     "gold": None,
     "gold_coder_id": "gold",
+    "text_quality": True,
+    "language_model_path": None,
+    "missing_placeholders": None,
 }
 
 _TEMPLATE_NAME = "config_template.yaml"
@@ -89,6 +92,9 @@ def _run(args: argparse.Namespace) -> None:
         item_title_column=config["item_title_column"],
         source_file=config["input"],
         write_csvs=write_csvs,
+        text_quality=config["text_quality"],
+        language_model_path=config["language_model_path"],
+        missing_placeholders=config["missing_placeholders"],
     )
     if config["gold"]:
         print(f"Merged gold labels for keys: {', '.join(config['gold'])}")

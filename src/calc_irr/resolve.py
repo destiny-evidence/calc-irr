@@ -41,7 +41,9 @@ def resolve_labels(
         "resolved",
     }
     coder_cols = [
-        c for c in coding_df.select_dtypes("number").columns if c not in meta_cols
+        c
+        for c in coding_df.select_dtypes("number").columns
+        if c not in meta_cols and not c.endswith(("_missing", "_non_english"))
     ]
     categories = set(pd.unique(coding_df[coder_cols].to_numpy().ravel()))
     categories.discard(np.nan)

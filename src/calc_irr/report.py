@@ -151,3 +151,38 @@ def render_report_html(
         .replace("$source_line", source_line)
         .replace("$key_sections", "".join(key_sections))
     )
+
+
+_TEXT_QUALITY_LABELS = {
+    "title_missing": "Title missing",
+    "abstract_missing": "Abstract missing",
+    "title_non_english": "Title contains non-English",
+    "abstract_non_english": "Abstract contains non-English",
+}
+
+
+def render_text_quality_summary(counts: dict[str, int], n_items: int) -> str:
+    """Report section with how many items each text check flagged."""
+    rows = DataFrame(
+        [
+            {
+                "check": _TEXT_QUALITY_LABELS.get(col, col),
+                "items flagged": n,
+                "% of items": f"{n / n_items * 100:.1f}%" if n_items else "—",
+            }
+            for col, n in counts.items()
+        ]
+    )
+    note = (
+        f"Automatic checks on the title and abstract of all {n_items} items. "
+        "Per-item True/False flags are in the coding and review CSVs."
+    )
+    if "abstract_non_english" not in counts:
+        note += " The non-English check was skipped (language model unavailable)."
+    return f"""
+        <section class="key-section">
+            <h2>Text quality</h2>
+            <p class="table-note">{escape(note)}</p>
+            {dataframe_to_html_table(rows)}
+        </section>
+        """
