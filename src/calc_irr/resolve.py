@@ -7,6 +7,9 @@ import pandas as pd
 from pandas import DataFrame
 
 
+FLAG_PREFIX = "any_marked_"
+
+
 def resolve_labels(
     coding_df: DataFrame,
     completed: str | Path | DataFrame,
@@ -43,7 +46,9 @@ def resolve_labels(
     coder_cols = [
         c
         for c in coding_df.select_dtypes("number").columns
-        if c not in meta_cols and not c.endswith(("_missing", "_non_english"))
+        if c not in meta_cols
+        and not c.endswith(("_missing", "_non_english"))
+        and not c.startswith(FLAG_PREFIX)
     ]
     categories = set(pd.unique(coding_df[coder_cols].to_numpy().ravel()))
     categories.discard(np.nan)

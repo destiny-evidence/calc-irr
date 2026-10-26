@@ -61,6 +61,21 @@ text_quality: true
 # Replaces the built-in list of "no abstract" placeholders (case-insensitive):
 # missing_placeholders: ["", "n/a", "none", "no abstract available"]
 
+# Yes/no questions coders answered, flagged per item (optional). Each flag
+# adds an `any_marked_<name>` column to the coding/review/resolved CSVs: True
+# if at least one coder gave `value` as the answer to the `key` question
+# (matching the CSV's <key>|0 / <key>|1 columns). A blank answer counts as
+# not marked. `value` defaults to 1; `report: true` also adds a line to the
+# report saying how many unique items were marked (off by default).
+# flags:
+#   difficult:            # any_marked_difficult
+#     key: is_difficult
+#     value: 1
+#     report: true
+#   ineligible:           # any_marked_ineligible
+#     key: is_eligible
+#     value: 0
+
 # Merge resolved/gold labels in as an extra coder, per key (optional). Each
 # path is a CSV with an item id column and a `resolved` column -- e.g. the
 # <key>_resolved.csv from `calc-irr resolve`. Useful for checking a

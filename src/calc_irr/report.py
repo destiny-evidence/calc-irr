@@ -22,17 +22,26 @@ def build_coding_export(
     votes: DataFrame,
     item_id_col: str,
     abstracts_df: DataFrame | None,
+    flags_df: DataFrame | None = None,
 ) -> DataFrame:
     """All items for a key (`votes` is its wide coder-vote table), with disagreement_level, abstract text, each coder's vote,
 
     and a "resolved" column: the shared classification when all coders
-    agree, blank otherwise (left for discussion to fill in).
+    agree, blank otherwise (left for discussion to fill in). With
+    `flags_df` (from `coder_flags`), also its `any_marked_<name>` True/False
+    columns right after the abstract text.
     """
     to_resolve = disagreement_df[[item_id_col, "disagreement_level"]].copy()
     to_resolve.insert(0, "key", key)
 
     if abstracts_df is not None:
         to_resolve = to_resolve.merge(abstracts_df, on=item_id_col, how="left")
+
+    if flags_df is not None:
+        to_resolve = to_resolve.merge(flags_df, on=item_id_col, how="left")
+        for col in flags_df.columns.drop(item_id_col):
+            to_resolve[col] = to_resolve[col].astype("boolean").fillna(False)
+            to_resolve[col] = to_resolve[col].astype(bool)
 
     coder_cols = [c for c in votes.columns if c != item_id_col]
     to_resolve = to_resolve.merge(votes, on=item_id_col, how="left")
@@ -184,5 +193,20 @@ def render_text_quality_summary(counts: dict[str, int], n_items: int) -> str:
             <h2>Text quality</h2>
             <p class="table-note">{escape(note)}</p>
             {dataframe_to_html_table(rows)}
+        </section>
+        """
+
+
+def render_flag_summary(name: str, key: str, n_flagged: int, n_items: int) -> str:
+    """Report section with how many unique items any coder marked with a flag."""
+    pct = f" ({n_flagged / n_items * 100:.1f}% of {n_items} items)" if n_items else ""
+    return f"""
+        <section class="key-section">
+            <h2>Items marked {escape(name)}</h2>
+            <p class="alpha-stat"><strong>{n_flagged}</strong> unique item(s) were
+                marked {escape(name)} by at least one coder{escape(pct)}.</p>
+            <p class="table-note">From the {escape(key)} question; a blank
+                answer counts as not marked. The per-item any_marked_{escape(name)}
+                column is in the coding and review CSVs.</p>
         </section>
         """

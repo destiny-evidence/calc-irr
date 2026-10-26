@@ -88,12 +88,18 @@ keys:
   only -- and pairwise Cohen's kappa with per-pair disagreement counts.
   Sections are numbered within each key, each with a one-line caption saying
   what it shows. After all the keys: a "Text quality" summary (items with a
-  missing title/abstract or non-English text, see below).
+  missing title/abstract or non-English text, see below), then for each of
+  `flags` with `report: true`, a line giving how many unique items at least
+  one coder marked (a blank answer counts as not marked).
 - **Coding CSV** (`<priority_dir>/<key>_coding.csv`, one per nominal key):
   every fully-coded item with its `disagreement_level` (`High`/`Medium`/`Low`, by
   degree of coder disagreement), abstract text, each coder's vote, and a
   `resolved` column — pre-filled with the shared classification when all
-  coders agree, left blank when they don't. The full audit record.
+  coders agree, left blank when they don't. With `flags` set, also one
+  `any_marked_<name>` column per flag after the abstract text: True if at
+  least one coder gave the flag's answer (e.g. `any_marked_difficult` for
+  "is_difficult = 1", `any_marked_ineligible` for "is_eligible = 0"). The
+  full audit record.
   Also four True/False text-quality columns right after the abstract:
   `title_missing`, `abstract_missing` (blank, a placeholder like "N/A", or
   under 20 characters), `title_non_english` and `abstract_non_english`

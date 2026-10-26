@@ -12,6 +12,7 @@ from sklearn.metrics import cohen_kappa_score
 from calc_irr.key_type import KeyType
 from calc_irr.report import (
     build_coding_export,
+    render_flag_summary,
     render_key_section,
     render_report_html,
     render_text_quality_summary,
@@ -19,6 +20,20 @@ from calc_irr.report import (
 from calc_irr.text_quality import text_quality_counts, text_quality_flags
 
 __all__ = ["IrrCalculator", "KeyType"]
+
+
+class CoderFlag(BaseModel):
+    """A yes/no question coders answered, summarized per item as `any_marked_<name>`.
+
+    `key` is the question in the export (e.g. "is_eligible", matching its
+    `is_eligible|0` / `is_eligible|1` columns), `value` the answer that
+    counts as a flag (e.g. 0 for "not eligible"), and `report` whether the
+    HTML report says how many items were flagged.
+    """
+
+    key: str
+    value: int = 1
+    report: bool = False
 
 
 class IrrCalculator(BaseModel):
@@ -372,6 +387,34 @@ class IrrCalculator(BaseModel):
         ].apply(lambda s: self._disagreement_label(s, min_score, max_score))
         return disagreement_df.sort_values("disagreement_score")
 
+    def coder_flags(self, flags: dict[str, CoderFlag]) -> DataFrame:
+        """Per item: one `any_marked_<name>` column per flag, True if at least
+        one coder gave that flag's `value` to its `key` question.
+
+        NACSOS often stores nothing when a box is left unticked, so a blank
+        answer counts as "not flagged" -- only an explicit `value` is a flag.
+        Items no coder answered any flag question for are left out (the
+        coding export fills them in as False).
+        """
+        result: DataFrame | None = None
+        for name, flag in flags.items():
+            if flag.key not in self.long_df:
+                self.collapse_one_hot_annotation(flag.key)
+            votes = self.long_df[flag.key].dropna(subset=[flag.key])
+            flagged = votes.loc[votes[flag.key] == flag.value, self.item_id]
+
+            column = votes[[self.item_id]].drop_duplicates()
+            column[f"any_marked_{name}"] = column[self.item_id].isin(flagged)
+            result = (
+                column
+                if result is None
+                else result.merge(column, on=self.item_id, how="outer")
+            )
+        assert result is not None
+        flag_cols = [c for c in result.columns if c != self.item_id]
+        result[flag_cols] = result[flag_cols].astype("boolean").fillna(False)
+        return result.astype({c: bool for c in flag_cols})
+
     def _resolve_abstracts_df(
         self,
         abstracts_df: DataFrame | None,
@@ -400,6 +443,7 @@ class IrrCalculator(BaseModel):
         item_title_column: str | None = "title",
         source_file: str | None = None,
         write_csvs: bool = True,
+        flags: dict[str, CoderFlag] | None = None,
         text_quality: bool = True,
         language_model_path: str | None = None,
         missing_placeholders: list[str] | None = None,
@@ -423,6 +467,12 @@ class IrrCalculator(BaseModel):
         and review CSVs are left untouched, so a review file already being
         edited isn't overwritten.
 
+        `flags` maps a name to a yes/no question coders answered (see
+        `CoderFlag`), e.g. {"difficult": CoderFlag(key="is_difficult")}. Each
+        adds an `any_marked_<name>` True/False column to the coding/review
+        CSVs (see `coder_flags`); flags with `report=True` also get a line in
+        the report saying how many unique items any coder marked.
+
         With `text_quality` (the default) and item text available, the report
         ends with a "Text quality" summary and the coding/review CSVs get True/False
         `title_missing`, `abstract_missing`, `title_non_english` and
@@ -436,7 +486,7 @@ class IrrCalculator(BaseModel):
         )
 
         key_sections = []
-        # The text quality summary goes after all the per-key sections
+        # Text quality and flag summaries go after all the per-key sections
         summary_sections = []
         if text_quality and resolved_abstracts is not None:
             quality = text_quality_flags(
@@ -461,6 +511,21 @@ class IrrCalculator(BaseModel):
             )
         priority_dir = Path(priority_csv_dir) if priority_csv_dir else None
         review_dir = Path(review_csv_dir) if review_csv_dir else priority_dir
+
+        item_flags = self.coder_flags(flags) if flags else None
+        if item_flags is not None:
+            assert self.df is not None
+            n_items = self.df[self.item_id].nunique()
+            for name, flag in flags.items():
+                if flag.report:
+                    summary_sections.append(
+                        render_flag_summary(
+                            name,
+                            flag.key,
+                            int(item_flags[f"any_marked_{name}"].sum()),
+                            n_items,
+                        )
+                    )
 
         for key in self.keys:
             self._ensure_wide(key)
@@ -498,6 +563,7 @@ class IrrCalculator(BaseModel):
                     self.wide_df[key],
                     self.item_id,
                     resolved_abstracts,
+                    item_flags,
                 )
                 export.to_csv(priority_dir / f"{key}_coding.csv", index=False)
 

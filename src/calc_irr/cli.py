@@ -1,11 +1,12 @@
 import argparse
+import re
 from importlib import resources
 from pathlib import Path
 
 import pandas as pd
 import yaml
 
-from calc_irr import IrrCalculator, KeyType, resolve_labels
+from calc_irr import CoderFlag, IrrCalculator, KeyType, resolve_labels
 
 _DEFAULTS = {
     "coder_id": "user_id",
@@ -18,6 +19,7 @@ _DEFAULTS = {
     "resolved_dir": None,
     "gold": None,
     "gold_coder_id": "gold",
+    "flags": None,
     "text_quality": True,
     "language_model_path": None,
     "missing_placeholders": None,
@@ -41,6 +43,27 @@ def _load_config(config_path: str) -> dict:
     except ValueError as e:
         valid_types = [t.value for t in KeyType]
         raise ValueError(f"{e}; must be one of {valid_types}") from e
+
+    if "difficulty_key" in raw:
+        raise ValueError(
+            "'difficulty_key' was replaced by 'flags'; change "
+            f"'difficulty_key: {raw['difficulty_key']}' to:\n"
+            "flags:\n"
+            "  difficult:\n"
+            f"    key: {raw['difficulty_key']}\n"
+            "    value: 1\n"
+            "    report: true"
+        )
+    if raw.get("flags"):
+        for name in raw["flags"]:
+            if not re.fullmatch(r"[A-Za-z0-9_]+", str(name)):
+                raise ValueError(
+                    f"flag name {name!r} must be letters, digits or underscores "
+                    "(it becomes the any_marked_<name> column)"
+                )
+        raw["flags"] = {
+            name: CoderFlag(**settings) for name, settings in raw["flags"].items()
+        }
 
     return {**_DEFAULTS, **raw}
 
@@ -92,6 +115,7 @@ def _run(args: argparse.Namespace) -> None:
         item_title_column=config["item_title_column"],
         source_file=config["input"],
         write_csvs=write_csvs,
+        flags=config["flags"],
         text_quality=config["text_quality"],
         language_model_path=config["language_model_path"],
         missing_placeholders=config["missing_placeholders"],
