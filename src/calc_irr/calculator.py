@@ -415,6 +415,22 @@ class IrrCalculator(BaseModel):
         result[flag_cols] = result[flag_cols].astype("boolean").fillna(False)
         return result.astype({c: bool for c in flag_cols})
 
+    def coder_notes(self, notes_column: str) -> DataFrame:
+        """Per item: `coder_notes`, every coder's non-empty note as "coder: note",
+        joined with " | " (coders in name order). Items without notes are left out.
+        """
+        if self.df is None or notes_column not in self.df.columns:
+            raise KeyError(f"Notes column not found: {notes_column}")
+        notes = self.df[[self.item_id, self.coder_id, notes_column]].copy()
+        notes[notes_column] = notes[notes_column].astype("string").str.strip()
+        notes = notes[notes[notes_column].fillna("") != ""].sort_values(
+            [self.item_id, self.coder_id]
+        )
+        notes["coder_notes"] = (
+            notes[self.coder_id].astype(str) + ": " + notes[notes_column]
+        )
+        return notes.groupby(self.item_id)["coder_notes"].agg(" | ".join).reset_index()
+
     def _resolve_abstracts_df(
         self,
         abstracts_df: DataFrame | None,
@@ -447,6 +463,7 @@ class IrrCalculator(BaseModel):
         text_quality: bool = True,
         language_model_path: str | None = None,
         missing_placeholders: list[str] | None = None,
+        notes_column: str | None = None,
     ) -> str:
         """Write an HTML IRR report (alpha, disagreements, coder completeness, kappa) for all keys to output_path.
 
@@ -480,6 +497,11 @@ class IrrCalculator(BaseModel):
         `text_quality.text_quality_flags`). `language_model_path` overrides
         where the fastText model is cached; `missing_placeholders` replaces
         the default list of "no abstract" placeholder strings.
+
+        `notes_column` names the export's free-text coder notes column. If
+        given, the coding and to-review CSVs get a `coder_notes` column just
+        before `resolved` (see `coder_notes`). It's for discussion only: the
+        report doesn't show it, and resolve_labels leaves it out.
         """
         resolved_abstracts = self._resolve_abstracts_df(
             abstracts_df, item_text_column, item_title_column
@@ -512,6 +534,7 @@ class IrrCalculator(BaseModel):
         priority_dir = Path(priority_csv_dir) if priority_csv_dir else None
         review_dir = Path(review_csv_dir) if review_csv_dir else priority_dir
 
+        notes = self.coder_notes(notes_column) if notes_column else None
         item_flags = self.coder_flags(flags) if flags else None
         if item_flags is not None:
             assert self.df is not None
@@ -565,6 +588,13 @@ class IrrCalculator(BaseModel):
                     resolved_abstracts,
                     item_flags,
                 )
+                if notes is not None:
+                    export = export.merge(notes, on=self.item_id, how="left")
+                    export.insert(
+                        export.columns.get_loc("resolved"),
+                        "coder_notes",
+                        export.pop("coder_notes"),
+                    )
                 export.to_csv(priority_dir / f"{key}_coding.csv", index=False)
 
                 to_resolve = export[export["resolved"].isna()]

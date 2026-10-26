@@ -107,6 +107,9 @@ keys:
   non-English abstracts count). The language model (~1MB) is downloaded to
   `~/.cache/calc-irr/` on first run; if that fails, the non-English columns
   are skipped with a warning. Set `text_quality: false` to turn these off.
+  With `notes_column` set, also a `coder_notes` column before `resolved`
+  (each coder's free-text note as "coder: note", joined by " | "); it's for
+  discussion only, so resolved files leave it out.
 - **To-review CSV** (`<priority_dir>/<key>_to_review.csv`, one per nominal key):
   just the disagreement rows from the coding CSV (where `resolved` is
   blank) — the lean file to actually send out for discussion. Once it comes

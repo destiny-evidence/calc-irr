@@ -76,6 +76,11 @@ text_quality: true
 #     key: is_eligible
 #     value: 0
 
+# Free-text notes column in the export (optional). If set, the coding/review
+# CSVs get a `coder_notes` column before `resolved`, with every coder's note
+# on that item as "coder: note", joined by " | ". Not shown in the report.
+# notes_column: notes
+
 # Merge resolved/gold labels in as an extra coder, per key (optional). Each
 # path is a CSV with an item id column and a `resolved` column -- e.g. the
 # <key>_resolved.csv from `calc-irr resolve`. Useful for checking a

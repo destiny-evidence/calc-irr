@@ -23,6 +23,7 @@ _DEFAULTS = {
     "text_quality": True,
     "language_model_path": None,
     "missing_placeholders": None,
+    "notes_column": None,
 }
 
 _TEMPLATE_NAME = "config_template.yaml"
@@ -119,6 +120,7 @@ def _run(args: argparse.Namespace) -> None:
         text_quality=config["text_quality"],
         language_model_path=config["language_model_path"],
         missing_placeholders=config["missing_placeholders"],
+        notes_column=config["notes_column"],
     )
     if config["gold"]:
         print(f"Merged gold labels for keys: {', '.join(config['gold'])}")
