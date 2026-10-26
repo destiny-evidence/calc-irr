@@ -97,3 +97,14 @@ text_quality: true
 # <key>_to_review_completed.csv (with `resolved` filled in by hand); resolve
 # writes <key>_resolved.csv next to it. Required for `calc-irr resolve`.
 # resolved_dir: output
+
+# <key>_resolved.csv always has key/item_id/title/text/resolved/decision, plus
+# whichever of these the coding CSV has: the four text-quality columns,
+# any_marked_<name> flags, and coder_notes (anonymized: names become coder_a,
+# coder_b, ..., lettered in name order, so consistent across keys). Coder
+# votes and names are never included.
+# Extra columns to keep after those (optional), taken from the completed
+# review file where it has them (e.g. columns added during discussion), the
+# coding CSV otherwise.
+# resolved_columns:
+#   - Reason

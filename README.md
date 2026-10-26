@@ -109,7 +109,7 @@ keys:
   are skipped with a warning. Set `text_quality: false` to turn these off.
   With `notes_column` set, also a `coder_notes` column before `resolved`
   (each coder's free-text note as "coder: note", joined by " | "); it's for
-  discussion only, so resolved files leave it out.
+  discussion, and resolved files keep it with coder names anonymized.
 - **To-review CSV** (`<priority_dir>/<key>_to_review.csv`, one per nominal key):
   just the disagreement rows from the coding CSV (where `resolved` is
   blank) — the lean file to actually send out for discussion. Once it comes
@@ -126,11 +126,19 @@ into `resolved` for each row, and run `calc-irr resolve <config.yaml>`. It
 writes `<resolved_dir>/<key>_resolved.csv`: every item from
 `<key>_coding.csv` with just `key`, `item_id`, title, text, `resolved` and
 `decision` (`unanimous` if all coders agreed, `adjudicated` if the label came
-from the review file) -- no coder votes or discussion notes. Items the coders agreed on keep their
+from the review file), plus the text-quality columns, the `any_marked_<name>`
+flags and `coder_notes` when the coding CSV has them -- no coder votes. Items the coders agreed on keep their
 label; discussed items take the hand-filled value if it is numeric and one of
 the categories the coders used. Anything else (blank, text like `Exclude`, a
 typo like `5`) leaves `resolved` blank for that row, and the item ids are
 printed so they can be followed up.
+
+`coder_notes` is anonymized in the resolved file: coder names become
+`coder_a`, `coder_b`, ... (lettered in name order, so the same coder gets the
+same letter in every key's file). To keep more columns, list them under
+`resolved_columns:` in the config, e.g. a `Reason` column added during
+discussion. Columns come from the completed review file where it has them,
+the coding CSV otherwise.
 
 ## Validating a coder against already-resolved labels
 

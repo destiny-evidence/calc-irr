@@ -501,7 +501,7 @@ class IrrCalculator(BaseModel):
         `notes_column` names the export's free-text coder notes column. If
         given, the coding and to-review CSVs get a `coder_notes` column just
         before `resolved` (see `coder_notes`). It's for discussion only: the
-        report doesn't show it, and resolve_labels leaves it out.
+        report doesn't show it, and resolve_labels anonymizes it.
         """
         resolved_abstracts = self._resolve_abstracts_df(
             abstracts_df, item_text_column, item_title_column

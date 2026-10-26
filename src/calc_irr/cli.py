@@ -24,6 +24,7 @@ _DEFAULTS = {
     "language_model_path": None,
     "missing_placeholders": None,
     "notes_column": None,
+    "resolved_columns": None,
 }
 
 _TEMPLATE_NAME = "config_template.yaml"
@@ -162,6 +163,7 @@ def _resolve(args: argparse.Namespace) -> None:
             item_id_col=item_id,
             title_col=config["item_title_column"],
             text_col=config["item_text_column"],
+            extra_columns=config["resolved_columns"],
         )
 
         output_path = resolved_dir / f"{key}_resolved.csv"
